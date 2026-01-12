@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>静音カメラ Pro</title>
+    <style>
+        :root {
+            --safe-top: env(safe-area-inset-top);
+            --safe-bottom: env(safe-area-inset-bottom);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #000;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            color: white;
+        }
+
+        #camera-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        /* UI Overlay */
+        .controls {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            padding: 30px 20px;
+            padding-bottom: calc(40px + var(--safe-bottom));
+            background: linear-gradient(transparent, rgba(0,0,0,0.8));
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform 0.1s, background 0.2s;
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+        }
+
+        .btn:active {
+            transform: scale(0.9);
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        #capture-btn {
+            width: 85px;
+            height: 85px;
+            background: white;
+            border: 6px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        #capture-btn .inner-circle {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid #000;
+        }
+
+        #capture-btn:active {
+            background: #ccc;
+        }
+
+        .btn-icon {
+            font-size: 24px;
+        }
+
+        /* Thumbnail Area */
+        .thumbnail-container {
+            position: absolute;
+            bottom: calc(130px + var(--safe-bottom));
+            left: 20px;
+            width: 64px;
+            height: 64px;
+            border-radius: 12px;
+            border: 2px solid white;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            z-index: 11;
+            background: #222;
+            display: none;
+            transition: transform 0.2s;
+        }
+
+        .thumbnail-container:active {
+            transform: scale(0.95);
+        }
+
+        .thumbnail-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Modals */
+        #preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 2000;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #preview-modal.active {
+            display: flex;
+        }
+
+        #preview-image {
+            max-width: 100%;
+            max-height: 80vh;
+            object-fit: contain;
+        }
+
+        .modal-header {
+            position: absolute;
+            top: var(--safe-top);
+            width: 100%;
+            padding: 20px;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .close-btn {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            font-size: 28px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .action-bar {
+            position: absolute;
+            bottom: var(--safe-bottom);
+            width: 100%;
+            padding: 30px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .action-btn {
+            background: white;
+            border: none;
+            color: black;
+            padding: 16px 32px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: 600;
+            flex: 1;
+            max-width: 200px;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        /* Status Messages */
+        #status-msg {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 15px 25px;
+            border-radius: 20px;
+            z-index: 3000;
+            display: none;
+            text-align: center;
+            font-size: 14px;
+            pointer-events: none;
+        }
+
+        /* Flash Effect */
+        .flash-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: white;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 1000;
+        }
+
+        .flash-anim {
+            animation: flash-frames 0.25s ease-out;
+        }
+
+        @keyframes flash-frames {
+            0% { opacity: 0; }
+            40% { opacity: 0.7; }
+            100% { opacity: 0; }
+        }
+
+        /* Permission Prompt */
+        #permission-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 5000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            text-align: center;
+        }
+
+        #permission-screen h2 { margin-bottom: 20px; }
+        #permission-screen p { margin-bottom: 30px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div id="permission-screen">
+        <h2>カメラの使用許可</h2>
+        <p>静音カメラを使用するには、カメラへのアクセスを許可する必要があります。</p>
+        <button class="action-btn" id="init-camera-btn">カメラを起動する</button>
+    </div>
+
+    <div id="camera-container">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+
+        <div class="thumbnail-container" id="thumbnail">
+            <img id="thumbnail-img" src="" alt="Latest Photo">
+        </div>
+
+        <div class="controls">
+            <div id="flip-btn" class="btn" title="カメラ切り替え">
+                <span class="btn-icon">🔄</span>
+            </div>
+            
+            <div id="capture-btn" class="btn">
+                <div class="inner-circle"></div>
+            </div>
+            
+            <div id="gallery-btn" class="btn" title="最近の写真">
+                <span class="btn-icon">🖼️</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="flash-overlay" id="flash"></div>
+
+    <div id="preview-modal">
+        <div class="modal-header">
+            <button class="close-btn" id="close-preview">✕</button>
+        </div>
+        <img id="preview-image" src="" alt="Captured">
+        <div class="action-bar">
+            <button class="action-btn" id="share-btn">共有・保存</button>
+            <button class="action-btn" id="download-btn" style="background: #333; color: white;">保存</button>
+        </div>
+    </div>
+
+    <div id="status-msg"></div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const flipBtn = document.getElementById('flip-btn');
+        const galleryBtn = document.getElementById('gallery-btn');
+        const thumbnail = document.getElementById('thumbnail');
+        const thumbnailImg = document.getElementById('thumbnail-img');
+        const previewModal = document.getElementById('preview-modal');
+        const previewImage = document.getElementById('preview-image');
+        const closePreview = document.getElementById('close-preview');
+        const downloadBtn = document.getElementById('download-btn');
+        const shareBtn = document.getElementById('share-btn');
+        const flash = document.getElementById('flash');
+        const statusMsg = document.getElementById('status-msg');
+        const permissionScreen = document.getElementById('permission-screen');
+        const initBtn = document.getElementById('init-camera-btn');
+
+        let currentStream = null;
+        let facingMode = 'environment';
+        let photos = [];
+
+        // ステータスメッセージ表示
+        function showStatus(text, duration = 2000) {
+            statusMsg.innerHTML = text;
+            statusMsg.style.display = 'block';
+            setTimeout(() => {
+                statusMsg.style.display = 'none';
+            }, duration);
+        }
+
+        // カメラ起動
+        async function startCamera() {
+            try {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+
+                const constraints = {
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 4096 }, // 高解像度を試行
+                        height: { ideal: 2160 }
+                    },
+                    audio: false
+                };
+
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                permissionScreen.style.display = 'none';
+                
+                // ビデオ読み込み完了
+                await video.play();
+            } catch (error) {
+                console.error('Camera Error:', error);
+                showStatus('カメラの起動に失敗しました。<br>ブラウザの設定を確認してください。', 5000);
+            }
+        }
+
+        // 撮影処理
+        function capturePhoto() {
+            if (!video.videoWidth) return;
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            // 左右反転の対応（インカメラの場合）
+            if (facingMode === 'user') {
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+            }
+
+            // フラッシュ演出
+            flash.classList.remove('flash-anim');
+            void flash.offsetWidth; // reflow
+            flash.classList.add('flash-anim');
+
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+            
+            canvas.toBlob((blob) => {
+                const photoObj = {
+                    url: dataUrl,
+                    blob: blob,
+                    id: Date.now()
+                };
+                photos.push(photoObj);
+                
+                // サムネイル更新
+                thumbnailImg.src = dataUrl;
+                thumbnail.style.display = 'block';
+                
+                // 触覚フィードバック（可能な場合）
+                if (window.navigator.vibrate) {
+                    window.navigator.vibrate(50);
+                }
+            }, 'image/jpeg', 0.9);
+        }
+
+        // プレビュー表示
+        function openPreview(url) {
+            previewImage.src = url || photos[photos.length - 1]?.url;
+            if (previewImage.src) {
+                previewModal.classList.add('active');
+            }
+        }
+
+        // イベントリスナー
+        initBtn.addEventListener('click', startCamera);
+
+        captureBtn.addEventListener('click', capturePhoto);
+
+        flipBtn.addEventListener('click', () => {
+            facingMode = facingMode === 'environment' ? 'user' : 'environment';
+            startCamera();
+        });
+
+        thumbnail.addEventListener('click', () => openPreview());
+        galleryBtn.addEventListener('click', () => {
+            if (photos.length > 0) openPreview();
+            else showStatus('まだ写真がありません');
+        });
+
+        closePreview.addEventListener('click', () => {
+            previewModal.classList.remove('active');
+        });
+
+        // 保存（ダウンロード）
+        downloadBtn.addEventListener('click', () => {
+            const currentPhoto = photos.find(p => p.url === previewImage.src) || photos[photos.length - 1];
+            if (!currentPhoto) return;
+
+            const link = document.createElement('a');
+            link.href = currentPhoto.url;
+            link.download = `camera_shot_${currentPhoto.id}.jpg`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showStatus('保存しました');
+        });
+
+        // 共有
+        shareBtn.addEventListener('click', async () => {
+            const currentPhoto = photos.find(p => p.url === previewImage.src) || photos[photos.length - 1];
+            if (!currentPhoto) return;
+
+            try {
+                if (navigator.share && navigator.canShare) {
+                    const file = new File([currentPhoto.blob], 'photo.jpg', { type: 'image/jpeg' });
+                    if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            files: [file],
+                            title: '写真の共有',
+                        });
+                    } else {
+                        throw new Error('Share not supported');
+                    }
+                } else {
+                    // フォールバック
+                    downloadBtn.click();
+                }
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    showStatus('共有に失敗しました。ダウンロードを試してください。');
+                }
+            }
+        });
+
+        // ページ可視性チェック（バックグラウンド時にカメラ停止）
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                if (currentStream) {
+                    currentStream.getTracks().forEach(track => track.stop());
+                }
+            } else {
+                if (permissionScreen.style.display === 'none') {
+                    startCamera();
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>
