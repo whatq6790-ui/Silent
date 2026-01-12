@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Camera Pro</title>
+    <style>
+        :root {
+            --ios-blue: #007AFF;
+            --ios-bg: #000000;
+            --ios-card: #1C1C1E;
+            --safe-top: env(safe-area-inset-top);
+            --safe-bottom: env(safe-area-inset-bottom);
+            --ios-red: #ff3b30;
+        }
+
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+            -webkit-tap-highlight-color: transparent; 
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--ios-bg);
+            color: white;
+            overflow: hidden;
+            width: 100vw; 
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* --- Camera View --- */
+        #camera-view {
+            position: relative; 
+            width: 100%; 
+            height: 100%;
+            display: flex; 
+            flex-direction: column;
+            background: #000;
+        }
+
+        #video { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+        }
+        
+        .camera-controls {
+            position: absolute; 
+            bottom: 0; 
+            width: 100%;
+            padding: 20px 30px calc(40px + var(--safe-bottom));
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            z-index: 10;
+        }
+
+        .shutter-outer {
+            width: 76px; 
+            height: 76px; 
+            border-radius: 50%;
+            border: 4px solid white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .shutter-inner {
+            width: 62px; 
+            height: 62px; 
+            background: white; 
+            border-radius: 50%;
+            transition: transform 0.1s, opacity 0.1s;
+        }
+
+        .shutter-outer:active .shutter-inner { 
+            transform: scale(0.9); 
+            opacity: 0.8;
+        }
+
+        .control-icon {
+            width: 44px; 
+            height: 44px; 
+            background: rgba(255,255,255,0.15);
+            border-radius: 50%; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center;
+            backdrop-filter: blur(15px); 
+            -webkit-backdrop-filter: blur(15px);
+            cursor: pointer; 
+            font-size: 20px;
+        }
+
+        .preview-thumb {
+            width: 48px; 
+            height: 48px; 
+            border-radius: 8px; 
+            overflow: hidden;
+            background: #222; 
+            border: 1px solid rgba(255,255,255,0.3);
+            cursor: pointer;
+        }
+
+        .preview-thumb img { 
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+        }
+
+        /* --- Gallery View --- */
+        #gallery-view {
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: var(--ios-bg); 
+            z-index: 100;
+            display: none; 
+            flex-direction: column;
+            transform: translateY(100%); 
+            transition: transform 0.4s cubic-bezier(0.1, 0.7, 0.1, 1);
+        }
+
+        #gallery-view.active { 
+            display: flex; 
+            transform: translateY(0); 
+        }
+
+        .gallery-header {
+            padding: calc(10px + var(--safe-top)) 16px 10px;
+            background: rgba(0,0,0,0.85); 
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            border-bottom: 0.5px solid #333;
+            z-index: 101;
+        }
+
+        .header-title { 
+            font-size: 17px; 
+            font-weight: 600; 
+        }
+
+        .header-btn {
+            font-size: 17px; 
+            color: var(--ios-blue);
+            background: none; 
+            border: none; 
+            cursor: pointer; 
+            padding: 5px;
+        }
+
+        .header-btn.cancel { font-weight: 600; }
+
+        .gallery-content { 
+            flex: 1; 
+            overflow-y: auto; 
+            padding: 2px;
+            background: #000;
+        }
+
+        .photo-grid {
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 2px;
+        }
+
+        .grid-item {
+            aspect-ratio: 1/1; 
+            position: relative; 
+            cursor: pointer;
+            background: #111;
+        }
+
+        .grid-item img {
+            width: 100%; 
+            height: 100%; 
+            object-fit: cover; 
+            display: block;
+            transition: opacity 0.2s;
+        }
+
+        .check-circle {
+            position: absolute; 
+            bottom: 8px; 
+            right: 8px;
+            width: 24px; 
+            height: 24px; 
+            border-radius: 50%;
+            border: 1.5px solid white;
+            background: rgba(0,0,0,0.2);
+            display: none; 
+            align-items: center; 
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .selection-mode .check-circle { display: flex; }
+
+        .grid-item.selected .check-circle {
+            background: var(--ios-blue); 
+            border-color: var(--ios-blue);
+        }
+
+        .grid-item.selected .check-circle::after {
+            content: '✓'; 
+            font-size: 14px; 
+            font-weight: bold; 
+            color: white;
+        }
+
+        .grid-item.selected img { opacity: 0.6; }
+
+        .bottom-bar-container {
+            padding-bottom: var(--safe-bottom);
+            background: rgba(20,20,20,0.95); 
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-top: 0.5px solid #333;
+        }
+
+        .tab-bar {
+            display: flex; 
+            justify-content: space-around; 
+            align-items: center;
+            height: 50px;
+        }
+
+        .tab-item {
+            display: flex; 
+            flex-direction: column; 
+            align-items: center;
+            color: #888; 
+            font-size: 10px; 
+            cursor: pointer;
+        }
+
+        .tab-item.active { color: var(--ios-blue); }
+
+        .tab-icon { font-size: 22px; margin-bottom: 2px; }
+
+        .action-bar {
+            display: none; 
+            justify-content: space-between; 
+            align-items: center;
+            height: 50px; 
+            padding: 0 20px;
+        }
+
+        .action-btn {
+            background: none; 
+            border: none; 
+            cursor: pointer;
+            color: var(--ios-blue); 
+            font-size: 22px;
+            padding: 10px;
+        }
+
+        .action-btn.delete { color: #555; pointer-events: none; } 
+        .action-btn.active-delete { color: var(--ios-red); pointer-events: auto; }
+
+        /* --- Full Preview --- */
+        #preview-overlay {
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: #000; 
+            z-index: 200; 
+            display: none; 
+            flex-direction: column;
+        }
+
+        .preview-nav {
+            padding: calc(10px + var(--safe-top)) 16px 10px;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .preview-img-container {
+            flex: 1; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .preview-img-container img { 
+            max-width: 100%; 
+            max-height: 100%; 
+            object-fit: contain;
+            transition: transform 0.3s ease-out;
+        }
+
+        .preview-tools {
+            padding: 20px 40px calc(20px + var(--safe-bottom));
+            display: flex; 
+            justify-content: space-between;
+            background: rgba(0,0,0,0.5);
+        }
+
+        /* Animations */
+        .flash {
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            background: white; 
+            opacity: 0; 
+            pointer-events: none; 
+            z-index: 300;
+        }
+
+        .flash.flash-anim { animation: flashEffect 0.2s ease-out; }
+        @keyframes flashEffect { 0% {opacity: 1;} 100% {opacity: 0;} }
+
+        .hidden { display: none !important; }
+
+        /* Custom Modal Replacement for alert/confirm */
+        #custom-dialog {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .dialog-box {
+            background: #2c2c2e;
+            width: 270px;
+            border-radius: 14px;
+            overflow: hidden;
+            text-align: center;
+            animation: dialogPop 0.2s ease-out;
+        }
+        @keyframes dialogPop { from { transform: scale(1.1); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .dialog-content { padding: 20px; border-bottom: 0.5px solid #444; }
+        .dialog-title { font-weight: 600; font-size: 17px; margin-bottom: 4px; }
+        .dialog-text { font-size: 13px; color: #ddd; }
+        .dialog-actions { display: flex; }
+        .dialog-btn {
+            flex: 1; padding: 12px; border: none; background: none;
+            color: var(--ios-blue); font-size: 17px; cursor: pointer;
+        }
+        .dialog-btn:first-child { border-right: 0.5px solid #444; }
+        .dialog-btn.danger { color: var(--ios-red); }
+    </style>
+</head>
+<body>
+
+    <!-- Camera Layer -->
+    <div id="camera-view">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="camera-controls">
+            <div class="preview-thumb" id="cam-thumb-btn">
+                <img id="cam-thumb-img" src="" style="display:none">
+            </div>
+            <div class="shutter-outer" id="shutter-btn"><div class="shutter-inner"></div></div>
+            <div class="control-icon" id="flip-btn">🔄</div>
+        </div>
+    </div>
+
+    <!-- Gallery Layer -->
+    <div id="gallery-view">
+        <div class="gallery-header">
+            <button class="header-btn" id="gallery-back-btn">＜ カメラ</button>
+            <span class="header-title" id="header-title">最近の項目</span>
+            <button class="header-btn" id="select-mode-btn">選択</button>
+        </div>
+
+        <div class="gallery-content">
+            <div class="photo-grid" id="photo-grid"></div>
+        </div>
+
+        <div class="bottom-bar-container">
+            <div class="tab-bar" id="tab-bar">
+                <div class="tab-item active">
+                    <span class="tab-icon">🖼️</span><span>ライブラリ</span>
+                </div>
+                <div class="tab-item">
+                    <span class="tab-icon">♥</span><span>お気に入り</span>
+                </div>
+            </div>
+            <div class="action-bar" id="action-bar">
+                <button class="action-btn" id="bulk-share-btn">📤</button>
+                <span style="font-size:14px; color:#aaa;" id="selected-count">0枚を選択</span>
+                <button class="action-btn delete" id="bulk-delete-btn">🗑️</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Preview -->
+    <div id="preview-overlay">
+        <div class="preview-nav">
+            <button class="header-btn" id="preview-back-btn">＜ 戻る</button>
+            <span style="font-size:15px; font-weight:600;">プレビュー</span>
+            <div style="width:50px"></div>
+        </div>
+        <div class="preview-img-container" id="preview-container">
+            <img id="preview-img" src="">
+        </div>
+        <div class="preview-tools">
+            <button class="action-btn" id="single-share-btn">📤</button>
+            <button class="action-btn active-delete" id="single-delete-btn">🗑️</button>
+        </div>
+    </div>
+
+    <!-- Dialog -->
+    <div id="custom-dialog">
+        <div class="dialog-box">
+            <div class="dialog-content">
+                <div class="dialog-title" id="dialog-title">タイトル</div>
+                <div class="dialog-text" id="dialog-text">メッセージ</div>
+            </div>
+            <div class="dialog-actions">
+                <button class="dialog-btn" id="dialog-cancel">キャンセル</button>
+                <button class="dialog-btn danger" id="dialog-confirm">削除</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flash" id="flash"></div>
+    <canvas id="canvas" style="display:none"></canvas>
+
+    <script>
+        // DOM References
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const flash = document.getElementById('flash');
+        const galleryView = document.getElementById('gallery-view');
+        const previewOverlay = document.getElementById('preview-overlay');
+        const photoGrid = document.getElementById('photo-grid');
+        const previewImg = document.getElementById('preview-img');
+        const camThumbImg = document.getElementById('cam-thumb-img');
+        
+        // Buttons
+        const shutterBtn = document.getElementById('shutter-btn');
+        const flipBtn = document.getElementById('flip-btn');
+        const camThumbBtn = document.getElementById('cam-thumb-btn');
+        const galleryBackBtn = document.getElementById('gallery-back-btn');
+        const selectModeBtn = document.getElementById('select-mode-btn');
+        const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+        const bulkShareBtn = document.getElementById('bulk-share-btn');
+        
+        // UI Controls
+        const tabBar = document.getElementById('tab-bar');
+        const actionBar = document.getElementById('action-bar');
+        const selectedCountLabel = document.getElementById('selected-count');
+        const headerTitle = document.getElementById('header-title');
+
+        // State
+        let stream = null;
+        let facingMode = 'environment';
+        let photos = []; 
+        let isSelectionMode = false;
+        let selectedIndices = new Set();
+        let currentPreviewIndex = null;
+
+        // Custom Dialog Logic
+        const dialog = document.getElementById('custom-dialog');
+        let dialogResolve = null;
+
+        function showConfirm(title, text, confirmText = "削除") {
+            return new Promise(resolve => {
+                document.getElementById('dialog-title').innerText = title;
+                document.getElementById('dialog-text').innerText = text;
+                document.getElementById('dialog-confirm').innerText = confirmText;
+                dialog.style.display = 'flex';
+                dialogResolve = resolve;
+            });
+        }
+
+        document.getElementById('dialog-cancel').onclick = () => {
+            dialog.style.display = 'none';
+            dialogResolve(false);
+        };
+        document.getElementById('dialog-confirm').onclick = () => {
+            dialog.style.display = 'none';
+            dialogResolve(true);
+        };
+
+        // --- Camera Operations ---
+        async function initCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            try {
+                const constraints = {
+                    video: { 
+                        facingMode: facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                };
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = stream;
+            } catch (err) {
+                console.error("Camera access error:", err);
+                // Non-blocking error UI
+                headerTitle.innerText = "カメラにアクセスできません";
+            }
+        }
+
+        function takePhoto() {
+            if (!video.videoWidth) return;
+            
+            // Visual Flash
+            flash.classList.remove('flash-anim');
+            void flash.offsetWidth; 
+            flash.classList.add('flash-anim');
+
+            const ctx = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const photo = { id: Date.now(), url, blob };
+                photos.unshift(photo);
+                updateCamThumb();
+                renderGrid();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function updateCamThumb() {
+            if (photos.length > 0) {
+                camThumbImg.src = photos[0].url;
+                camThumbImg.style.display = 'block';
+            } else {
+                camThumbImg.style.display = 'none';
+            }
+        }
+
+        // --- Gallery Rendering ---
+        function renderGrid() {
+            photoGrid.innerHTML = '';
+            photos.forEach((p, i) => {
+                const isSelected = selectedIndices.has(i);
+                const div = document.createElement('div');
+                div.className = `grid-item ${isSelected ? 'selected' : ''}`;
+                div.onclick = () => handleGridClick(i);
+                
+                const img = document.createElement('img');
+                img.src = p.url;
+                img.loading = "lazy";
+                
+                const circle = document.createElement('div');
+                circle.className = 'check-circle';
+                
+                div.appendChild(img);
+                div.appendChild(circle);
+                photoGrid.appendChild(div);
+            });
+
+            // Update footer
+            selectedCountLabel.innerText = `${selectedIndices.size}枚を選択`;
+            if (selectedIndices.size > 0) {
+                bulkDeleteBtn.className = 'action-btn active-delete';
+            } else {
+                bulkDeleteBtn.className = 'action-btn delete';
+            }
+        }
+
+        function handleGridClick(index) {
+            if (isSelectionMode) {
+                if (selectedIndices.has(index)) {
+                    selectedIndices.delete(index);
+                } else {
+                    selectedIndices.add(index);
+                }
+                renderGrid();
+            } else {
+                openPreview(index);
+            }
+        }
+
+        function toggleSelectionMode() {
+            isSelectionMode = !isSelectionMode;
+            selectedIndices.clear();
+            
+            if (isSelectionMode) {
+                selectModeBtn.innerText = 'キャンセル';
+                selectModeBtn.classList.add('cancel');
+                photoGrid.classList.add('selection-mode');
+                headerTitle.innerText = '項目を選択';
+                galleryBackBtn.style.visibility = 'hidden';
+                tabBar.style.display = 'none';
+                actionBar.style.display = 'flex';
+            } else {
+                selectModeBtn.innerText = '選択';
+                selectModeBtn.classList.remove('cancel');
+                photoGrid.classList.remove('selection-mode');
+                headerTitle.innerText = '最近の項目';
+                galleryBackBtn.style.visibility = 'visible';
+                tabBar.style.display = 'flex';
+                actionBar.style.display = 'none';
+            }
+            renderGrid();
+        }
+
+        // --- Actions ---
+        async function shareSelected() {
+            const indices = Array.from(selectedIndices);
+            if (indices.length === 0) return;
+
+            const files = indices.map(idx => {
+                const p = photos[idx];
+                return new File([p.blob], `photo_${p.id}.jpg`, { type: 'image/jpeg' });
+            });
+
+            if (navigator.canShare && navigator.canShare({ files })) {
+                try {
+                    await navigator.share({ files, title: 'Photo Library' });
+                } catch (e) { console.log("Share failed", e); }
+            } else {
+                // Clipboard fallback
+                const link = photos[indices[0]].url;
+                document.execCommand('copy');
+                alert("一括共有はこの環境でサポートされていません。");
+            }
+        }
+
+        async function deleteSelected() {
+            const indices = Array.from(selectedIndices);
+            if (indices.length === 0) return;
+
+            const confirmed = await showConfirm(
+                "写真を削除", 
+                `${indices.length}枚の写真を削除しますか？`
+            );
+            
+            if (confirmed) {
+                // Remove in descending order to keep indices valid
+                indices.sort((a,b) => b-a).forEach(idx => {
+                    URL.revokeObjectURL(photos[idx].url);
+                    photos.splice(idx, 1);
+                });
+                toggleSelectionMode(); // Reset mode
+                updateCamThumb();
+                renderGrid();
+            }
+        }
+
+        // --- Preview Logic ---
+        function openPreview(index) {
+            currentPreviewIndex = index;
+            previewImg.src = photos[index].url;
+            previewOverlay.style.display = 'flex';
+        }
+
+        let touchStart = 0;
+        document.getElementById('preview-container').addEventListener('touchstart', (e) => {
+            touchStart = e.touches[0].clientX;
+        });
+
+        document.getElementById('preview-container').addEventListener('touchend', (e) => {
+            const delta = touchStart - e.changedTouches[0].clientX;
+            if (Math.abs(delta) > 60) {
+                if (delta > 0 && currentPreviewIndex < photos.length - 1) {
+                    openPreview(currentPreviewIndex + 1);
+                } else if (delta < 0 && currentPreviewIndex > 0) {
+                    openPreview(currentPreviewIndex - 1);
+                }
+            }
+        });
+
+        // Event Listeners
+        shutterBtn.onclick = takePhoto;
+        
+        flipBtn.onclick = () => {
+            facingMode = (facingMode === 'environment') ? 'user' : 'environment';
+            initCamera();
+        };
+
+        camThumbBtn.onclick = () => {
+            if (photos.length > 0) {
+                galleryView.style.display = 'flex';
+                void galleryView.offsetWidth; // Force layout
+                galleryView.classList.add('active');
+            }
+        };
+
+        galleryBackBtn.onclick = () => {
+            galleryView.classList.remove('active');
+            setTimeout(() => { galleryView.style.display = 'none'; }, 400);
+        };
+
+        selectModeBtn.onclick = toggleSelectionMode;
+        bulkShareBtn.onclick = shareSelected;
+        bulkDeleteBtn.onclick = deleteSelected;
+
+        document.getElementById('preview-back-btn').onclick = () => {
+            previewOverlay.style.display = 'none';
+        };
+
+        document.getElementById('single-share-btn').onclick = async () => {
+            const p = photos[currentPreviewIndex];
+            const file = new File([p.blob], `photo.jpg`, { type: 'image/jpeg' });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file] });
+            }
+        };
+
+        document.getElementById('single-delete-btn').onclick = async () => {
+            const confirmed = await showConfirm("削除", "この写真を削除しますか？");
+            if (confirmed) {
+                URL.revokeObjectURL(photos[currentPreviewIndex].url);
+                photos.splice(currentPreviewIndex, 1);
+                previewOverlay.style.display = 'none';
+                renderGrid();
+                updateCamThumb();
+            }
+        };
+
+        // Initialize on load
+        window.addEventListener('load', initCamera);
+    </script>
+</body>
+</html>
